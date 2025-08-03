@@ -6,12 +6,12 @@
 #![allow(clippy::type_complexity)]
 
 /*
- * RINEX is part of the nav-solutions framework.
+ * ANTEX is part of the nav-solutions framework.
  * Authors: Guillaume W. Bres <guillaume.bressaix@gmail.com> et al.
- * (cf. https://github.com/nav-solutions/rinex/graphs/contributors)
+ * (cf. https://github.com/nav-solutions/antex/graphs/contributors)
  * This framework is shipped under Mozilla Public V2 license.
  *
- * Documentation: https://github.com/nav-solutions/rinex
+ * Documentation: https://github.com/nav-solutions/antex
  */
 
 extern crate num_derive;
