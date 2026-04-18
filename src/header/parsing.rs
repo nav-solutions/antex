@@ -3,10 +3,9 @@ use crate::{
     antex::{HeaderFields as AntexHeader, Pcv},
     hardware::{Antenna, Receiver, SvAntenna},
     header::{DcbCompensation, Header, PcvCompensation},
-    leap::Leap,
     linspace::Linspace,
     marker::{GeodeticMarker, MarkerType},
-    prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
+    prelude::{Constellation, ParsingError, COSPAR, DOMES, SV},
     types::Type,
     version::Version,
 };
@@ -77,7 +76,6 @@ impl Header {
                 // --> storing might be useful
                 comments.push(content.trim().to_string());
                 continue;
-
             } else if marker.contains("ANTENNA: B.SIGHT XYZ") {
             } else if marker.contains("ANTENNA: ZERODIR XYZ") {
             } else if marker.contains("ANTENNA: PHASECENTER") {
@@ -98,7 +96,6 @@ impl Header {
                 }
 
                 rinex_type = Type::AntennaData;
-
             } else if marker.contains("PCV TYPE / REFANT") {
                 let (pcv_str, rem) = content.split_at(20);
                 let (rel_type, rem) = rem.split_at(20);
@@ -322,17 +319,14 @@ impl Header {
                 };
 
                 dcb_compensations.push(dcb);
-            
             } else if marker.contains("MERGED FILE") {
                 //TODO V > 3
                 // nb# of merged files
-            
             } else if marker.contains("STATION INFORMATION") {
                 let url = content.split_at(40).0.trim(); //TODO confirm please
                 if url.len() > 0 {
                     station_url = Some(url.to_string());
                 }
-            
             } else if marker.contains("LICENSE OF USE") {
                 let lic = content.split_at(40).0.trim(); //TODO confirm please
                 if lic.len() > 0 {
@@ -340,7 +334,6 @@ impl Header {
                 }
             } else if marker.contains("WAVELENGTH FACT L1/2") {
                 //TODO
-            
             } else if marker.contains("APPROX POSITION XYZ") {
                 let mut num_items = 0;
                 let (mut x_ecef_m, mut y_ecef_m, mut z_ecef_m) = (0.0_f64, 0.0_f64, 0.0_f64);
@@ -417,7 +410,6 @@ impl Header {
                         }
                     }
                 }
-            
             } else if marker.contains("STATION NAME / NUM") {
                 let (name, domes) = content.split_at(4);
                 clock = clock.site(name.trim());

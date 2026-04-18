@@ -69,9 +69,10 @@ pub struct Header {
 }
 
 impl Default for Header {
+    /// Creates a new v1.4 ANTEX [Header]
     fn default() -> Self {
         Self {
-            version: Version::new(1, 0),
+            version: Version::new(1, 4),
             program: Some(format!(
                 "nav-sls/antex v{}",
                 Self::format_pkg_version(env!("CARGO_PKG_VERSION"))

@@ -7,18 +7,20 @@ pub enum Error {
     UnknownPcv(String),
 }
 
-/// Antenna Phase Center Variation types
+/// Type of Antenna Phase Center Variations to be found
+/// in the following ANTEX file.
 #[derive(Default, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum Pcv {
-    /// PCV is absolute
+pub enum PCV {
+    /// Absolute [PCV]
     #[default]
     Absolute,
-    /// PCV is relative to attached reference
+
+    /// [PCV] relative to the following reference
     Relative(String),
 }
 
-impl std::str::FromStr for Pcv {
+impl std::str::FromStr for PCV {
     type Err = Error;
     fn from_str(content: &str) -> Result<Self, Self::Err> {
         if content.eq("A") {
@@ -31,7 +33,7 @@ impl std::str::FromStr for Pcv {
     }
 }
 
-impl Pcv {
+impl PCV {
     pub fn is_relative(&self) -> bool {
         matches!(self, Self::Relative(_))
     }
@@ -53,18 +55,18 @@ mod test {
     use std::str::FromStr;
     #[test]
     fn test_pcv() {
-        assert_eq!(Pcv::default(), Pcv::Absolute);
-        assert!(Pcv::Absolute.is_absolute());
-        assert!(!Pcv::Relative(String::from("AOAD/M_T")).is_absolute());
+        assert_eq!(PCV::default(), PCV::Absolute);
+        assert!(PCV::Absolute.is_absolute());
+        assert!(!PCV::Relative(String::from("AOAD/M_T")).is_absolute());
 
-        let pcv = Pcv::from_str("A");
+        let pcv = PCV::from_str("A");
         assert!(pcv.is_ok());
         let pcv = pcv.unwrap();
-        assert_eq!(pcv, Pcv::Absolute);
+        assert_eq!(pcv, PCV::Absolute);
 
-        let pcv = Pcv::from_str("R");
+        let pcv = PCV::from_str("R");
         assert!(pcv.is_ok());
         let pcv = pcv.unwrap();
-        assert_eq!(pcv, Pcv::Relative(String::from("AOAD/M_T")));
+        assert_eq!(pcv, PCV::Relative(String::from("AOAD/M_T")));
     }
 }

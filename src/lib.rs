@@ -3,7 +3,6 @@
 )]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![allow(clippy::type_complexity)]
 
 /*
  * ANTEX is part of the nav-solutions framework.
@@ -45,13 +44,11 @@ use std::{
 
 use itertools::Itertools;
 
-/// Comments identified during parsing process.
+/// Comments identified during parsing process, that we
+/// preserve "as is".
 pub type Comments = Vec<String>;
 
 use antex::{Antenna, FrequencyDependentData};
-
-#[cfg(feature = "antex")]
-use antex::{AntennaMatcher, AntennaSpecific};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -61,10 +58,13 @@ use std::collections::BTreeMap;
 
 pub mod prelude {
     // export
-    pub use crate::{header::Header, pcv::PCV, ANTEX};
-
-    // pub re-export
-    pub use gnss::prelude::{Constellation, DOMESTrackingPoint, Epoch, COSPAR, DOMES, SV};
+    pub use crate::{
+        database::{AntennaMatcher, AntennaSpecific},
+        header::Header,
+        pcv::PCV,
+        record::{AntennaPhasePattern, FrequencyDependentData, Record},
+        ANTEX,
+    };
 }
 
 /// Returns true if provided line matches a standard COMMENT.
@@ -105,7 +105,46 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// The file structure is made of
 /// - a file [Header]
 /// - and a [Record] section.
-#[derive(Clone, Debug)]
+///
+/// ```
+/// let database = ANTEX::from_file("data/ATX/ROULAR25.24__LEIT_2020_09_24.atx")
+///     .unwrap();
+///
+/// // file comprises a Header
+/// let header = database.header;
+///
+/// // file then describes frequency dependent compensation parameters
+/// for (entry, value) in database.record.iter() {
+///     // Antenna describes which antenna the following parameters apply to
+///     antenna = entry.antenna;
+///
+///   let calibration = antenna.calibration;
+///   // several calibration methods exist
+///   if calibration.method == CalibrationMethod::Chamber {
+///     // calibration is certified
+///     // from `calibration.valid_from` (chrono::NaiveDateTime)
+///     // until `calibration.valid_until` (chrono::NaiveDateTime)
+///   }
+///   // calibration process informations
+///   assert_eq!(calibration.agency, "Some agency");
+///   assert_eq!(calibration.date, "DateTime description");
+///   // antenna information
+///   assert_eq!(antenna.sn, "Serial Number");
+///   assert_eq!(antenna.dazi, 1.0);
+///   for frequency in frequencies.iter() {
+///     for pattern in frequency.patterns {
+///         assert_eq!(pattern.is_azimuth_dependent(), true);
+///         let Some((azimuth, phase_pattern)) = pattern.azimuth_dependent() {
+///             for raw_phase in phase_patter.iter() {
+///                 // raw phase pattern data
+///             }
+///
+///     // frequency dependent phase pattern
+///     for frequency in value.iter() {
+///     }
+/// }
+/// ```
+#[derive(Clone, Default, Debug)]
 pub struct ANTEX {
     /// [Header] gives general information and describes following content.
     pub header: Header,
@@ -118,7 +157,8 @@ pub struct ANTEX {
 }
 
 impl ANTEX {
-    pub fn new(header: Header, record: record::Record) -> Self {
+    /// Define a new [ANTEX] structure with desired [Record] and [Header].
+    pub fn new(header: Header, record: Record) -> Self {
         Self {
             header,
             record,
