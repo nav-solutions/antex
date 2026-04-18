@@ -16,9 +16,6 @@
 
 extern crate num_derive;
 
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
@@ -64,10 +61,10 @@ use std::collections::BTreeMap;
 
 pub mod prelude {
     // export
-    pub use crate::{pcv::PCV, ANTEX};
+    pub use crate::{header::Header, pcv::PCV, ANTEX};
 
     // pub re-export
-    pub use gnss::prelude::{Constellation, DOMESTrackingPoint, COSPAR, DOMES, SV};
+    pub use gnss::prelude::{Constellation, DOMESTrackingPoint, Epoch, COSPAR, DOMES, SV};
 }
 
 /// Returns true if provided line matches a standard COMMENT.
@@ -97,11 +94,18 @@ pub(crate) fn fmt_antex(content: &str, marker: &str) -> String {
 
 /// Format a standardized COMMENT, possibly wrapped on several lines.
 pub(crate) fn fmt_comment(content: &str) -> String {
-    fmt_rinex(content, "COMMENT")
+    fmt_antex(content, "COMMENT")
 }
 
+/// [ANTEX] is a database described in a text file,
+/// for precise antenna calibrations, as required by precise navigation.
+/// The antenna specs can apply to either ground antenna (for specific brands and frequency bands),
+/// or space antenna, on board satellite vehicles.
+///
+/// The file structure is made of
+/// - a file [Header]
+/// - and a [Record] section.
 #[derive(Clone, Debug)]
-/// [ANTEX] comprises a [Header] and a [Record] section.
 pub struct ANTEX {
     /// [Header] gives general information and describes following content.
     pub header: Header,
@@ -109,7 +113,7 @@ pub struct ANTEX {
     /// [Comments] stored as they appeared in file body
     pub comments: Comments,
 
-    /// [Record] is the actual file content and is heavily [RinexType] dependent
+    /// [Record] is the actual file content
     pub record: Record,
 }
 
@@ -209,7 +213,7 @@ impl ANTEX {
     /// ```
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
-    pub fn from_gzip_file<P: AsRef<Path>>(path: P) -> Result<Rinex, ParsingError> {
+    pub fn from_gzip_file<P: AsRef<Path>>(path: P) -> Result<ANTEX, ParsingError> {
         let path = path.as_ref();
 
         let fd = File::open(path)?;

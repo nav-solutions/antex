@@ -5,7 +5,6 @@ use crate::prelude::ANTEX;
 
 use std::collections::HashMap;
 
-mod formatting;
 mod parsing;
 
 #[cfg(feature = "serde")]
@@ -53,6 +52,13 @@ pub struct Header {
     /// Possible Digital Object Identifier
     pub doi: Option<String>,
 
+    /// Type of Phase Center Variation in use
+    pub pcv: pcv::Pcv,
+
+    /// Optionnal reference antenna Serial Number
+    /// used to produce this calibration file
+    pub reference_ant_sn: Option<String>,
+
     /// Possible information about satellite vehicle antenna.
     /// This only exists in ANTEX format.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -65,7 +71,7 @@ pub struct Header {
 impl Default for Header {
     fn default() -> Self {
         Self {
-            version: Version::new(4, 0),
+            version: Version::new(1, 0),
             program: Some(format!(
                 "nav-sls/antex v{}",
                 Self::format_pkg_version(env!("CARGO_PKG_VERSION"))
@@ -106,13 +112,28 @@ impl Header {
             .join(".")
     }
 
+    /// Define the type of [PCV] to be find in the following content
+    pub fn with_phase_center_variation(&self, pcv: PCV) -> Self {
+        let mut s = self.clone();
+        s.phase_center_variations = pcv;
+        s
+    }
+
+    /// Define the serial number of reference antenna
+    pub fn with_reference_antenna_serial_number(&self, serial_num: &str) -> Self {
+        let mut s = self.clone();
+        s.reference_antenna_serial_number = Some(serial_num.to_string());
+        s
+    }
+
     /// Generates the special "FILE MERGE" comment
     pub(crate) fn merge_comment(pkg_version: &str, timestamp: Epoch) -> String {
         let formatted_version = Self::format_pkg_version(pkg_version);
 
         let (y, m, d, hh, mm, ss, _) = timestamp.to_gregorian_utc();
+
         format!(
-            "nav-sols/antex v{} {:>width$}          {}{:02}{:02} {:02}{:02}{:02} {:x}",
+            "nav-sls/antex v{} {:>width$}          {}{:02}{:02} {:02}{:02}{:02} {:x}",
             formatted_version,
             "FILE MERGE",
             y,

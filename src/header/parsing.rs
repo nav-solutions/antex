@@ -1,18 +1,11 @@
-//! Describes a `RINEX` file header.
+//! ANTEX file header parsing
 use crate::{
     antex::{HeaderFields as AntexHeader, Pcv},
-    clock::{ClockProfileType, HeaderFields as ClockHeader, WorkClock},
-    doris::{HeaderFields as DorisHeader, Station as DorisStation},
     hardware::{Antenna, Receiver, SvAntenna},
-    hatanaka::CRINEX,
     header::{DcbCompensation, Header, PcvCompensation},
     leap::Leap,
     linspace::Linspace,
     marker::{GeodeticMarker, MarkerType},
-    meteo::{HeaderFields as MeteoHeader, Sensor as MeteoSensor},
-    navigation::{HeaderFields as NavigationHeader, IonosphereModel, KbModel, TimeOffset},
-    observable::Observable,
-    observation::HeaderFields as ObservationHeader,
     prelude::{Constellation, Duration, Epoch, ParsingError, TimeScale, COSPAR, DOMES, SV},
     types::Type,
     version::Version,
@@ -51,20 +44,12 @@ impl Header {
         let mut rx_position: Option<_> = Option::<(f64, f64, f64)>::None;
 
         let mut dcb_compensations: Vec<DcbCompensation> = Vec::new();
-        let mut ionod_corrections = HashMap::<Constellation, IonosphereModel>::with_capacity(4);
         let mut pcv_compensations: Vec<PcvCompensation> = Vec::new();
 
         let mut comments = Vec::<String>::with_capacity(8);
 
         // RINEX specific fields
         let mut current_constell: Option<Constellation> = None;
-
-        let mut observation = ObservationHeader::default();
-        let mut nav = NavigationHeader::default();
-        let mut meteo = MeteoHeader::default();
-        let mut clock = ClockHeader::default();
-        let mut antex = AntexHeader::default();
-        let mut doris = DorisHeader::default();
 
         for line in reader.lines() {
             if line.is_err() {
