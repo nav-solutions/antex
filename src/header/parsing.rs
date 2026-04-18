@@ -78,25 +78,6 @@ impl Header {
                 comments.push(content.trim().to_string());
                 continue;
 
-            ///////////////////////////////////////////////////////
-            // Handled elsewe: CRINEX specs
-            //     handled inside the smart I/O READER
-            //     we still have to grab what was idenfied though
-            //     and we do this at the end of the Header section
-            ///////////////////////////////////////////////////////
-            } else if marker.contains("CRINEX VERS") {
-                let version = Version::from_str(content[..10].trim())?;
-                let crinex = CRINEX::default().with_version(version);
-
-                observation.crinex = Some(crinex);
-            } else if marker.contains("CRINEX PROG / DATE") {
-                if let Some(ref mut crinex) = observation.crinex {
-                    *crinex = crinex.with_prog_date(content)?;
-                }
-
-                ///////////////////////////////////////////////////////
-                // Unhandled cases: TODO
-                ///////////////////////////////////////////////////////
             } else if marker.contains("ANTENNA: B.SIGHT XYZ") {
             } else if marker.contains("ANTENNA: ZERODIR XYZ") {
             } else if marker.contains("ANTENNA: PHASECENTER") {
@@ -117,6 +98,7 @@ impl Header {
                 }
 
                 rinex_type = Type::AntennaData;
+
             } else if marker.contains("PCV TYPE / REFANT") {
                 let (pcv_str, rem) = content.split_at(20);
                 let (rel_type, rem) = rem.split_at(20);
@@ -340,92 +322,17 @@ impl Header {
                 };
 
                 dcb_compensations.push(dcb);
-            } else if marker.contains("SYS / SCALE FACTOR") {
-                // TODO:
-                //   This will not work in case several observables
-                //   are declaredn which will required to analyze more than 1 line
-                let (gnss, rem) = content.split_at(2);
-                let gnss = gnss.trim();
-
-                /*
-                 * DORIS measurement special case, otherwise, standard OBS_RINEX
-                 */
-                let constell = if gnss.eq("D") {
-                    Constellation::Mixed // scaling applies to all measurements
-                } else {
-                    Constellation::from_str(gnss)?
-                };
-
-                // Parse scaling factor
-                let (factor, rem) = rem.split_at(6);
-                let factor = factor.trim();
-                let scaling = factor
-                    .parse::<u16>()
-                    .or(Err(ParsingError::SystemScalingFactor))?;
-
-                // parse end of line
-                let (_num, rem) = rem.split_at(3);
-                for observable_str in rem.split_ascii_whitespace() {
-                    let observable = Observable::from_str(observable_str)?;
-
-                    // latch scaling value
-                    if rinex_type == Type::DORIS {
-                        doris.with_scaling(observable, scaling);
-                    } else {
-                        observation.with_scaling(constell, observable, scaling);
-                    }
-                }
-            } else if marker.contains("SENSOR MOD/TYPE/ACC") {
-                if let Ok(sensor) = MeteoSensor::from_str(content) {
-                    meteo.sensors.push(sensor)
-                }
-            } else if marker.contains("SENSOR POS XYZ/H") {
-                /*
-                 * Meteo: sensor position information
-                 */
-                let (x, rem) = content.split_at(14);
-                let (y, rem) = rem.split_at(14);
-                let (z, rem) = rem.split_at(14);
-                let (h, phys) = rem.split_at(14);
-
-                let phys = phys.trim();
-                let observable = Observable::from_str(phys)?;
-
-                let x = x.trim();
-                let x = f64::from_str(x).or(Err(ParsingError::SensorCoordinates))?;
-
-                let y = y.trim();
-                let y = f64::from_str(y).or(Err(ParsingError::SensorCoordinates))?;
-
-                let z = z.trim();
-                let z = f64::from_str(z).or(Err(ParsingError::SensorCoordinates))?;
-
-                let h = h.trim();
-                let h = f64::from_str(h).or(Err(ParsingError::SensorCoordinates))?;
-
-                for sensor in meteo.sensors.iter_mut() {
-                    if sensor.observable == observable {
-                        *sensor = sensor.with_position((x, y, z));
-                        *sensor = sensor.with_height(h);
-                    }
-                }
-            } else if marker.contains("LEAP SECOND") {
-                let leap_str = content.split_at(40).0.trim();
-                let parsed = Leap::from_str(leap_str)?;
-                leap = Some(parsed.clone());
-            } else if marker.contains("DOI") {
-                let content = content.split_at(40).0.trim(); //  TODO: confirm please
-                if content.len() > 0 {
-                    doi = Some(content.to_string());
-                }
+            
             } else if marker.contains("MERGED FILE") {
                 //TODO V > 3
                 // nb# of merged files
+            
             } else if marker.contains("STATION INFORMATION") {
                 let url = content.split_at(40).0.trim(); //TODO confirm please
                 if url.len() > 0 {
                     station_url = Some(url.to_string());
                 }
+            
             } else if marker.contains("LICENSE OF USE") {
                 let lic = content.split_at(40).0.trim(); //TODO confirm please
                 if lic.len() > 0 {
@@ -433,6 +340,7 @@ impl Header {
                 }
             } else if marker.contains("WAVELENGTH FACT L1/2") {
                 //TODO
+            
             } else if marker.contains("APPROX POSITION XYZ") {
                 let mut num_items = 0;
                 let (mut x_ecef_m, mut y_ecef_m, mut z_ecef_m) = (0.0_f64, 0.0_f64, 0.0_f64);
@@ -509,89 +417,13 @@ impl Header {
                         }
                     }
                 }
-            } else if marker.contains("RCV CLOCK OFFS APPL") {
-                let value = content.split_at(20).0.trim();
-                let n =
-                    i32::from_str_radix(value, 10).or(Err(ParsingError::RcvClockOffsApplied))?;
-
-                observation.clock_offset_applied = n > 0;
-            } else if marker.contains("# OF SATELLITES") {
-                // ---> we don't need this info,
-                //     user can determine it by analyzing the record
-            } else if marker.contains("PRN / # OF OBS") {
-                // ---> we don't need this info,
-                //     user can determine it by analyzing the record
-            } else if marker.contains("SYS / PHASE SHIFT") {
-                //TODO
-            } else if marker.contains("SYS / PVCS APPLIED") {
-                // RINEX::ClockData specific
-                // + satellite system (G/R/E/C/I/J/S)
-                // + programe name to apply Phase Center Variation
-                // + source of corrections (url)
-                // <o repeated for each satellite system
-                // <o blank field when no corrections applied
-            } else if marker.contains("TIME OF FIRST OBS") {
-                let time_of_first_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_first_obs = Some(time_of_first_obs);
-                } else {
-                    observation = observation.with_timeof_first_obs(time_of_first_obs);
-                }
-            } else if marker.contains("TIME OF LAST OBS") {
-                let time_of_last_obs = Self::parse_time_of_obs(content)?;
-
-                if rinex_type == Type::DORIS {
-                    doris.timeof_last_obs = Some(time_of_last_obs);
-                } else {
-                    observation = observation.with_timeof_last_obs(time_of_last_obs);
-                }
-            } else if marker.contains("TYPES OF OBS") {
-                // these observations can serve both Observation & Meteo RINEX
-                Self::parse_v2_observables(content, constellation, &mut meteo, &mut observation);
-            } else if marker.contains("SYS / # / OBS TYPES") {
-                match rinex_type {
-                    Type::ObservationData => {
-                        Self::parse_v3_observables(
-                            content,
-                            &mut current_constell,
-                            &mut observation,
-                        );
-                    },
-                    Type::DORIS => {
-                        /* in DORIS RINEX, observations are not tied to a particular constellation */
-                        Self::parse_doris_observables(content, &mut doris);
-                    },
-                    _ => {},
-                }
-            } else if marker.contains("ANALYSIS CENTER") {
-                let (code, agency) = content.split_at(3);
-                clock = clock.igs(code.trim());
-                clock = clock.full_name(agency.trim());
-            } else if marker.contains("ANALYSIS CLK REF") {
-                let ck = WorkClock::parse(version, content);
-                clock = clock.work_clock(ck);
-            } else if marker.contains("# / TYPES OF DATA") {
-                let (n, r) = content.split_at(6);
-                let n = n.trim();
-                let n = n.parse::<u8>().or(Err(ParsingError::ClockTypeofData))?;
-
-                let mut rem = r;
-                for _ in 0..n {
-                    let (code, r) = rem.split_at(6);
-                    if let Ok(c) = ClockProfileType::from_str(code.trim()) {
-                        clock.codes.push(c);
-                    }
-                    rem = r;
-                }
+            
             } else if marker.contains("STATION NAME / NUM") {
                 let (name, domes) = content.split_at(4);
                 clock = clock.site(name.trim());
                 if let Ok(domes) = DOMES::from_str(domes.trim()) {
                     clock = clock.domes(domes);
                 }
-            } else if marker.contains("STATION CLK REF") {
-                clock = clock.refclock(content.trim());
             } else if marker.contains("SIGNAL STRENGHT UNIT") {
                 //TODO
             } else if marker.contains("INTERVAL") {
@@ -619,168 +451,6 @@ impl Header {
                         }
                     }
                 }
-            } else if marker.contains("GLONASS COD/PHS/BIS") {
-                //TODO
-                // This will help RTK solving against GLONASS SV
-            } else if marker.contains("ION ALPHA") {
-                // RINEX v2 Ionospheric correction. We tolerate BETA/ALPHA order mixup, as per
-                // RINEX v2 standards [https://files.igs.org/pub/data/format/rinex211.txt] paragraph 5.2.
-                match IonosphereModel::from_rinex2_header(content, marker) {
-                    Ok(IonosphereModel::Klobuchar(KbModel {
-                        alpha,
-                        beta,
-                        region,
-                    })) => {
-                        // Support GPS|GLO|BDS|GAL|QZSS|SBAS|IRNSS
-                        for c in [
-                            Constellation::GPS,
-                            Constellation::Glonass,
-                            Constellation::BeiDou,
-                            Constellation::Galileo,
-                            Constellation::IRNSS,
-                            Constellation::QZSS,
-                            Constellation::SBAS,
-                        ] {
-                            if let Some(correction) = ionod_corrections.get_mut(&c) {
-                                // Only Klobuchar models in RINEX2
-                                let kb_model = correction.as_klobuchar_mut().unwrap();
-                                kb_model.alpha = alpha;
-                                kb_model.region = region;
-                            } else {
-                                ionod_corrections.insert(
-                                    c,
-                                    IonosphereModel::Klobuchar(KbModel {
-                                        alpha,
-                                        beta,
-                                        region,
-                                    }),
-                                );
-                            }
-                        }
-                    },
-                    _ => {},
-                }
-            } else if marker.contains("ION BETA") {
-                // RINEX v2 Ionospheric correction. We are flexible in their order of appearance,
-                // RINEX v2 standards do NOT guarantee that (header fields are free order).
-                // [https://files.igs.org/pub/data/format/rinex211.txt] paragraph 5.2.
-                match IonosphereModel::from_rinex2_header(content, marker) {
-                    Ok(IonosphereModel::Klobuchar(KbModel {
-                        alpha,
-                        beta,
-                        region,
-                    })) => {
-                        // Support GPS|GLO|BDS|GAL|QZSS|SBAS|IRNSS
-                        for c in [
-                            Constellation::GPS,
-                            Constellation::Glonass,
-                            Constellation::BeiDou,
-                            Constellation::Galileo,
-                            Constellation::IRNSS,
-                            Constellation::QZSS,
-                            Constellation::SBAS,
-                        ] {
-                            if let Some(correction) = ionod_corrections.get_mut(&c) {
-                                // Only Klobuchar models in RINEX2
-                                let kb_model = correction.as_klobuchar_mut().unwrap();
-                                kb_model.beta = beta;
-                            } else {
-                                ionod_corrections.insert(
-                                    c,
-                                    IonosphereModel::Klobuchar(KbModel {
-                                        alpha,
-                                        beta,
-                                        region,
-                                    }),
-                                );
-                            }
-                        }
-                    },
-                    _ => {},
-                }
-            } else if marker.contains("IONOSPHERIC CORR") {
-                /*
-                 * RINEX3 IONOSPHERIC CORRECTION
-                 * We support both model in all RINEX2|RINEX3 constellations.
-                 * RINEX4 replaces that with actual file content (body) for improved correction accuracy.
-                 * The description requires 2 lines when dealing with KB model and we tolerate order mixup.
-                 */
-                let model_id = content.split_at(5).0;
-                if model_id.len() < 3 {
-                    /* BAD RINEX */
-                    continue;
-                }
-                let constell_id = &model_id[..3];
-                let constell = match constell_id {
-                    "GPS" => Constellation::GPS,
-                    "GAL" => Constellation::Galileo,
-                    "BDS" => Constellation::BeiDou,
-                    "QZS" => Constellation::QZSS,
-                    "IRN" => Constellation::IRNSS,
-                    "GLO" => Constellation::Glonass,
-                    _ => continue,
-                };
-                match IonosphereModel::from_rinex3_header(content) {
-                    Ok(IonosphereModel::Klobuchar(KbModel {
-                        alpha,
-                        beta,
-                        region,
-                    })) => {
-                        // KB requires two lines
-                        if let Some(ionod_model) = ionod_corrections.get_mut(&constell) {
-                            let kb_model = ionod_model.as_klobuchar_mut().unwrap();
-                            if model_id.ends_with('A') {
-                                kb_model.alpha = alpha;
-                                kb_model.region = region;
-                            } else {
-                                kb_model.beta = beta;
-                            }
-                        } else {
-                            // latch new model
-                            ionod_corrections.insert(
-                                constell,
-                                IonosphereModel::Klobuchar(KbModel {
-                                    alpha,
-                                    beta,
-                                    region,
-                                }),
-                            );
-                        }
-                    },
-                    Ok(ion) => {
-                        ionod_corrections.insert(constell, ion);
-                    },
-                    _ => {},
-                }
-            } else if marker.contains("DELTA-UTC") {
-                if let Ok(time_offset) = TimeOffset::parse_v2_delta_utc(content) {
-                    nav = nav.with_time_offset(time_offset);
-                }
-            } else if marker.contains("CORR TO SYSTEM TIME") {
-                if let Ok(time_offset) = TimeOffset::parse_v2_corr_to_system_time(content) {
-                    nav = nav.with_time_offset(time_offset);
-                }
-            } else if marker.contains("TIME SYSTEM CORR") {
-                if let Ok(time_offset) = TimeOffset::parse_v3(content) {
-                    nav = nav.with_time_offset(time_offset);
-                }
-            } else if marker.contains("TIME SYSTEM ID") {
-                let timescale = content.trim();
-                let ts = TimeScale::from_str(timescale)?;
-                clock = clock.timescale(ts);
-            } else if marker.contains("L2 / L1 DATE OFFSET") {
-                // DORIS special case
-                let content = content[1..].trim();
-
-                let time_offset_us = content
-                    .parse::<f64>()
-                    .or(Err(ParsingError::DorisL1L2DateOffset))?;
-
-                doris.u2_s1_time_offset = Duration::from_microseconds(time_offset_us);
-            } else if marker.contains("STATION REFERENCE") {
-                // DORIS special case
-                let station = DorisStation::from_str(content.trim())?;
-                doris.stations.push(station);
             }
         }
 
